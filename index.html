@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#38bdf8">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="喝水打卡">
+<title>喝水打卡</title>
+<style>
+  :root {
+    --primary: #38bdf8;
+    --primary-deep: #0284c7;
+    --primary-soft: #e0f2fe;
+    --bg-top: #dff1fc;
+    --bg-bottom: #f7fbfe;
+    --card: #ffffff;
+    --text: #0f172a;
+    --text-muted: #64748b;
+    --ring-track: #e6f3fb;
+    --shadow: 0 10px 32px rgba(2, 132, 199, 0.12);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body { height: 100%; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    background: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
+    color: var(--text);
+    display: flex;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 20px 16px 32px;
+  }
+
+  .app {
+    width: 100%;
+    max-width: 400px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  /* ---------- 头部 ---------- */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 6px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand .logo {
+    width: 40px; height: 40px; border-radius: 12px;
+    background: linear-gradient(135deg, #38bdf8, #0284c7);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+    box-shadow: 0 4px 12px rgba(2,132,199,0.35);
+  }
+  .brand h1 { font-size: 20px; font-weight: 700; letter-spacing: 0.5px; }
+  .brand .sub { font-size: 12px; color: var(--text-muted); }
+  .date { text-align: right; }
+  .date .week { font-size: 13px; color: var(--text-muted); }
+  .date .day { font-size: 20px; font-weight: 700; color: var(--primary-deep); }
+
+  /* ---------- 进度环卡片 ---------- */
+  .progress-card {
+    background: var(--card);
+    border-radius: 24px;
+    box-shadow: var(--shadow);
+    padding: 28px 20px 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .ring-wrap { position: relative; width: 210px; height: 210px; }
+  .ring-wrap svg { transform: rotate(-90deg); }
+  .ring-bg { fill: none; stroke: var(--ring-track); stroke-width: 14; }
+  .ring-fg {
+    fill: none; stroke: url(#grad); stroke-width: 14; stroke-linecap: round;
+    transition: stroke-dashoffset 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .ring-center {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+  }
+  .ring-center .num { font-size: 46px; font-weight: 800; line-height: 1; color: var(--primary-deep); letter-spacing: -0.5px; }
+  .ring-center .unit { font-size: 14px; color: var(--text-muted); margin-top: 4px; }
+  .ring-center .pct { font-size: 12px; color: var(--primary); margin-top: 6px; font-weight: 600; }
+
+  .status-line { margin-top: 18px; font-size: 14px; color: var(--text-muted); }
+  .status-line b { color: var(--primary-deep); }
+  .status-line.done { color: var(--primary-deep); font-weight: 700; }
+
+  /* ---------- 打卡按钮 ---------- */
+  .drink-btn {
+    width: 132px; height: 132px; border-radius: 50%;
+    border: none; cursor: pointer;
+    background: linear-gradient(145deg, #4cc2f9, #0284c7);
+    color: #fff;
+    font-size: 18px; font-weight: 700;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+    margin: 0 auto;
+    box-shadow: 0 10px 24px rgba(2,132,199,0.4), inset 0 2px 4px rgba(255,255,255,0.35);
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+    user-select: none;
+  }
+  .drink-btn:active { transform: scale(0.93); box-shadow: 0 5px 14px rgba(2,132,199,0.4); }
+  .drink-btn .cup { font-size: 34px; line-height: 1; }
+  .drink-btn .label { font-size: 16px; }
+
+  .btn-row { display: flex; align-items: center; justify-content: center; gap: 16px; margin-top: 6px; }
+  .undo-btn {
+    background: none; border: none; cursor: pointer;
+    color: var(--text-muted); font-size: 14px;
+    padding: 8px 12px; border-radius: 10px;
+  }
+  .undo-btn:active { background: var(--primary-soft); }
+  .undo-btn:disabled { opacity: 0.35; cursor: default; }
+
+  /* ---------- 目标设置 ---------- */
+  .goal-card {
+    background: var(--card);
+    border-radius: 20px;
+    box-shadow: var(--shadow);
+    padding: 6px 20px;
+    display: flex; flex-direction: column;
+  }
+  .setting-row { display: flex; align-items: center; justify-content: space-between; padding: 14px 0; }
+  .divider { height: 1px; background: #eef3f8; }
+  .goal-card .goal-label { font-size: 14px; color: var(--text-muted); }
+  .goal-card .goal-label b { display: block; font-size: 16px; color: var(--text); margin-top: 2px; }
+  .stepper { display: flex; align-items: center; gap: 4px; }
+  .stepper button {
+    width: 40px; height: 40px; border-radius: 12px;
+    border: none; cursor: pointer;
+    background: var(--primary-soft); color: var(--primary-deep);
+    font-size: 22px; font-weight: 700; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    transition: transform 0.1s ease;
+  }
+  .stepper button:active { transform: scale(0.88); }
+  .stepper .val { width: 62px; text-align: center; font-size: 22px; font-weight: 800; color: var(--primary-deep); }
+
+  /* ---------- 统计日历 ---------- */
+  .stat-card {
+    background: var(--card);
+    border-radius: 20px;
+    box-shadow: var(--shadow);
+    padding: 18px 16px 16px;
+  }
+  .stat-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+  .stat-head h2 { font-size: 15px; color: var(--text-muted); font-weight: 600; }
+  .tabs { display: flex; background: var(--ring-track); border-radius: 10px; padding: 3px; }
+  .tab {
+    border: none; background: none; cursor: pointer;
+    font-size: 13px; color: var(--text-muted); padding: 5px 14px; border-radius: 8px; font-weight: 600;
+    transition: all 0.15s ease;
+  }
+  .tab.active { background: #fff; color: var(--primary-deep); box-shadow: 0 2px 6px rgba(2,132,199,0.18); }
+
+  .nav-row { display: flex; align-items: center; justify-content: space-between; margin: 8px 0 12px; }
+  .nav-btn {
+    width: 32px; height: 32px; border-radius: 10px; border: none; cursor: pointer;
+    background: var(--primary-soft); color: var(--primary-deep); font-size: 20px; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    transition: transform 0.1s ease;
+  }
+  .nav-btn:active { transform: scale(0.88); }
+  .nav-title { font-size: 15px; font-weight: 700; color: var(--text); }
+
+  /* 周视图 */
+  .week-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+  .wcol { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .wcol .wday { font-size: 11px; color: var(--text-muted); }
+  .wdot {
+    width: 34px; height: 34px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 700; color: var(--text); background: #f1f6fb;
+  }
+  .wdot.filled { background: var(--primary-soft); color: var(--primary-deep); }
+  .wdot.full { background: linear-gradient(135deg, #4cc2f9, #0284c7); color: #fff; }
+  .wdot.today { box-shadow: 0 0 0 2px var(--primary); }
+  .wcol .wml { font-size: 10px; color: var(--primary-deep); font-weight: 600; }
+  .wcol .wml.dim { color: #cbd5e1; }
+
+  /* 月视图 */
+  .week-head { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 6px; }
+  .week-head span { text-align: center; font-size: 11px; color: var(--text-muted); }
+  .month-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .day-cell {
+    aspect-ratio: 1; border-radius: 10px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+    font-size: 13px; color: var(--text); background: #f7fbfe;
+  }
+  .day-cell .dd { font-size: 13px; }
+  .day-cell .dml { font-size: 9px; color: var(--primary-deep); font-weight: 700; }
+  .day-cell.empty { background: transparent; }
+  .day-cell.filled { background: var(--primary-soft); }
+  .day-cell.full { background: linear-gradient(135deg, #4cc2f9, #0284c7); color: #fff; }
+  .day-cell.full .dml { color: #fff; }
+  .day-cell.today { box-shadow: inset 0 0 0 2px var(--primary); }
+
+  /* 年视图 */
+  .year-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .ymon {
+    border-radius: 12px; padding: 10px 6px;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    background: #f1f6fb; color: var(--text-muted);
+  }
+  .ymon .ym { font-size: 12px; }
+  .ymon .ymv { font-size: 13px; font-weight: 700; }
+  .ymon.l1 { background: #e0f2fe; color: var(--primary-deep); }
+  .ymon.l2 { background: #7dd3fc; color: #fff; }
+  .ymon.l3 { background: #0284c7; color: #fff; }
+
+  .stat-total {
+    margin-top: 14px; padding-top: 12px; border-top: 1px solid #eef3f8;
+    text-align: center; font-size: 14px; color: var(--text-muted);
+  }
+  .stat-total b { color: var(--primary-deep); font-size: 16px; }
+
+  /* ---------- 水滴动效 ---------- */
+  .drop {
+    position: fixed; pointer-events: none; z-index: 50;
+    font-size: 22px;
+    animation: floatUp 0.9s ease-out forwards;
+  }
+  @keyframes floatUp {
+    0% { opacity: 0; transform: translateY(0) scale(0.6); }
+    25% { opacity: 1; }
+    100% { opacity: 0; transform: translateY(-120px) scale(1.3); }
+  }
+
+  .shake { animation: shake 0.4s; }
+  @keyframes shake {
+    0%,100% { transform: translateX(0); }
+    25% { transform: translateX(-5px); }
+    75% { transform: translateX(5px); }
+  }
+
+  /* ---------- 数据备份 ---------- */
+  .backup-card { display: flex; gap: 10px; }
+  .backup-btn {
+    flex: 1; padding: 12px; border-radius: 14px; border: none; cursor: pointer;
+    background: var(--card); color: var(--primary-deep); font-size: 14px; font-weight: 600;
+    box-shadow: var(--shadow);
+    transition: transform 0.1s ease;
+  }
+  .backup-btn:active { transform: scale(0.97); }
+
+  /* ---------- 提示 ---------- */
+  .toast {
+    position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%);
+    background: rgba(15, 23, 42, 0.92); color: #fff;
+    padding: 10px 18px; border-radius: 12px; font-size: 14px;
+    opacity: 0; transition: opacity 0.25s; z-index: 100; pointer-events: none;
+    max-width: 80%; text-align: center;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="brand">
+        <div class="logo">💧</div>
+        <div>
+          <h1>喝水打卡</h1>
+          <div class="sub">每天记得补充水分</div>
+        </div>
+      </div>
+      <div class="date">
+        <div class="week" id="weekText"></div>
+        <div class="day" id="dayText"></div>
+      </div>
+    </header>
+
+    <section class="progress-card">
+      <div class="ring-wrap">
+        <svg width="210" height="210" viewBox="0 0 210 210">
+          <defs>
+            <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#4cc2f9"/>
+              <stop offset="100%" stop-color="#0284c7"/>
+            </linearGradient>
+          </defs>
+          <circle class="ring-bg" cx="105" cy="105" r="90"/>
+          <circle class="ring-fg" id="ringFg" cx="105" cy="105" r="90"/>
+        </svg>
+        <div class="ring-center">
+          <div class="num" id="mlNum">0</div>
+          <div class="unit">/ <span id="goalMlNum">2000</span> ml</div>
+          <div class="pct" id="pctText">0 杯 · 0%</div>
+        </div>
+      </div>
+      <div class="status-line" id="statusLine">今天还没喝水，来一杯吧 💧</div>
+    </section>
+
+    <button class="drink-btn" id="drinkBtn">
+      <span class="cup">🥤</span>
+      <span class="label">+1 杯</span>
+    </button>
+
+    <div class="btn-row">
+      <button class="undo-btn" id="undoBtn">撤销一杯</button>
+      <span style="color:#cbd5e1">·</span>
+      <button class="undo-btn" id="resetBtn">重置今日</button>
+    </div>
+
+    <section class="goal-card">
+      <div class="setting-row">
+        <div class="goal-label">每日目标<b>目标毫升</b></div>
+        <div class="stepper">
+          <button id="goalMinus">−</button>
+          <div class="val" id="goalDisplay">2000</div>
+          <button id="goalPlus">+</button>
+        </div>
+      </div>
+      <div class="divider"></div>
+      <div class="setting-row">
+        <div class="goal-label">每杯容量<b>毫升 / 杯</b></div>
+        <div class="stepper">
+          <button id="mlMinus">−</button>
+          <div class="val" id="mlDisplay">250</div>
+          <button id="mlPlus">+</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="stat-card">
+      <div class="stat-head">
+        <h2>统计</h2>
+        <div class="tabs">
+          <button class="tab active" data-view="week">周</button>
+          <button class="tab" data-view="month">月</button>
+          <button class="tab" data-view="year">年</button>
+        </div>
+      </div>
+      <div class="nav-row">
+        <button class="nav-btn" id="navPrev">‹</button>
+        <div class="nav-title" id="navTitle"></div>
+        <button class="nav-btn" id="navNext">›</button>
+      </div>
+      <div class="cal" id="cal"></div>
+      <div class="stat-total" id="statTotal"></div>
+    </section>
+
+    <section class="backup-card">
+      <button class="backup-btn" id="exportBtn">⬇ 导出备份</button>
+      <button class="backup-btn" id="importBtn">⬆ 导入备份</button>
+      <input type="file" id="importFile" accept="application/json,.json" style="display:none">
+    </section>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  const STORE_KEY = 'water-tracker-v1';
+
+  // ---------- 数据 ----------
+  let state = { goalMl: 2000, cupMl: 250, records: {} }; // records: { 'YYYY-MM-DD': cups }
+  let view = 'week';
+  let offset = 0;
+
+  function load() {
+    try {
+      const raw = localStorage.getItem(STORE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        state.cupMl = parsed.cupMl || 250;
+        state.records = parsed.records || {};
+        if (parsed.goalMl) state.goalMl = parsed.goalMl;
+        else if (parsed.goal) state.goalMl = parsed.goal * state.cupMl; // 兼容旧数据：杯数 × 每杯容量
+        else state.goalMl = 2000;
+      }
+    } catch (e) { /* 忽略损坏数据 */ }
+  }
+  function save() {
+    localStorage.setItem(STORE_KEY, JSON.stringify(state));
+  }
+
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+  function dateKey(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  function todayKey() { return dateKey(new Date()); }
+  function getToday() { return state.records[todayKey()] || 0; }
+
+  function fmt(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+  function fmtL(ml) { return Math.round(ml / 100) / 10; }
+
+  // ---------- 日期工具 ----------
+  function weekDates(off) {
+    const now = new Date();
+    const day = now.getDay(); // 0=日, 1=一...
+    const mondayOffset = day === 0 ? -6 : 1 - day;
+    const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + mondayOffset + off * 7);
+    const days = [];
+    for (let i = 0; i < 7; i++) days.push(new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i));
+    return days;
+  }
+  function sumDays(dates) {
+    let cups = 0;
+    dates.forEach(d => { cups += state.records[dateKey(d)] || 0; });
+    return cups * state.cupMl;
+  }
+  function sumMonth(Y, M) {
+    const dim = new Date(Y, M + 1, 0).getDate();
+    const dates = [];
+    for (let d = 1; d <= dim; d++) dates.push(new Date(Y, M, d));
+    return sumDays(dates);
+  }
+
+  // ---------- 渲染 ----------
+  const $ = id => document.getElementById(id);
+  const mlNum = $('mlNum'), goalMlNum = $('goalMlNum'), pctText = $('pctText');
+  const ringFg = $('ringFg'), statusLine = $('statusLine');
+  const goalDisplay = $('goalDisplay'), mlDisplay = $('mlDisplay'), undoBtn = $('undoBtn');
+  const R = 90, CIRC = 2 * Math.PI * R;
+
+  function render() {
+    const cups = getToday();
+    const cupMl = state.cupMl;
+    const goalMl = state.goalMl;
+    const todayMl = cups * cupMl;
+    const pct = Math.min(todayMl / goalMl, 1);
+
+    mlNum.textContent = todayMl;
+    goalMlNum.textContent = goalMl;
+    goalDisplay.textContent = goalMl;
+    mlDisplay.textContent = cupMl;
+    pctText.textContent = cups + ' 杯 · ' + Math.round(pct * 100) + '%';
+
+    ringFg.style.strokeDasharray = CIRC;
+    ringFg.style.strokeDashoffset = CIRC * (1 - pct);
+
+    undoBtn.disabled = cups <= 0;
+
+    if (cups === 0) statusLine.textContent = '今天还没喝水，来一杯吧 💧';
+    else if (pct >= 1) { statusLine.textContent = '今日目标达成，太棒了！🎉'; statusLine.className = 'status-line done'; }
+    else { statusLine.textContent = '还差 ' + (goalMl - todayMl) + ' ml 达成目标，继续加油 💪'; statusLine.className = 'status-line'; }
+
+    renderStat();
+  }
+
+  function renderDate() {
+    const now = new Date();
+    const weeks = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+    $('weekText').textContent = weeks[now.getDay()];
+    $('dayText').textContent = (now.getMonth() + 1) + '月' + now.getDate() + '日';
+  }
+
+  // ---------- 统计日历 ----------
+  function renderStat() {
+    const navTitle = $('navTitle'), cal = $('cal'), total = $('statTotal');
+    if (view === 'week') renderWeekView(navTitle, cal, total);
+    else if (view === 'month') renderMonthView(navTitle, cal, total);
+    else renderYearView(navTitle, cal, total);
+  }
+
+  function renderWeekView(navTitle, cal, total) {
+    const days = weekDates(offset);
+    const today = new Date();
+    const names = ['一', '二', '三', '四', '五', '六', '日'];
+    const a = days[0], b = days[6];
+    let title = (a.getMonth() + 1) + '月' + a.getDate() + '日 – ' + (b.getMonth() + 1) + '月' + b.getDate() + '日';
+    if (b.getFullYear() !== a.getFullYear()) title = a.getFullYear() + '年' + title;
+    navTitle.textContent = title;
+
+    let html = '<div class="week-grid">';
+    days.forEach((d, i) => {
+      const cups = state.records[dateKey(d)] || 0;
+      const ml = cups * state.cupMl;
+      const pct = Math.min(ml / state.goalMl, 1);
+      const isToday = dateKey(d) === dateKey(today);
+      let dotCls = 'wdot';
+      if (pct > 0) dotCls += ' filled';
+      if (pct >= 1) dotCls += ' full';
+      if (isToday) dotCls += ' today';
+      const mlStr = ml > 0 ? '<span class="wml">' + ml + '</span>' : '<span class="wml dim">—</span>';
+      html += '<div class="wcol"><span class="wday">' + names[i] + '</span><div class="' + dotCls + '">' + d.getDate() + '</div>' + mlStr + '</div>';
+    });
+    html += '</div>';
+    cal.innerHTML = html;
+
+    const totalMl = sumDays(days);
+    total.innerHTML = '本周共 <b>' + fmt(totalMl) + ' ml</b>（约 ' + fmtL(totalMl) + ' 升）';
+  }
+
+  function renderMonthView(navTitle, cal, total) {
+    const base = new Date(new Date().getFullYear(), new Date().getMonth() + offset, 1);
+    const Y = base.getFullYear(), M = base.getMonth();
+    navTitle.textContent = Y + '年' + (M + 1) + '月';
+
+    const first = new Date(Y, M, 1);
+    const startOffset = (first.getDay() + 6) % 7; // 周一为第 0 列
+    const dim = new Date(Y, M + 1, 0).getDate();
+    const cells = [];
+    for (let i = 0; i < startOffset; i++) cells.push(null);
+    for (let d = 1; d <= dim; d++) cells.push(new Date(Y, M, d));
+    while (cells.length % 7 !== 0) cells.push(null);
+
+    const today = new Date();
+    const head = ['一', '二', '三', '四', '五', '六', '日'];
+    let html = '<div class="week-head">' + head.map(s => '<span>' + s + '</span>').join('') + '</div>';
+    html += '<div class="month-grid">';
+    cells.forEach(c => {
+      if (!c) { html += '<div class="day-cell empty"></div>'; return; }
+      const cups = state.records[dateKey(c)] || 0;
+      const ml = cups * state.cupMl;
+      const pct = Math.min(ml / state.goalMl, 1);
+      let cls = 'day-cell';
+      if (pct > 0) cls += ' filled';
+      if (pct >= 1) cls += ' full';
+      if (dateKey(c) === dateKey(today)) cls += ' today';
+      const mlStr = ml > 0 ? '<span class="dml">' + ml + '</span>' : '';
+      html += '<div class="' + cls + '"><span class="dd">' + c.getDate() + '</span>' + mlStr + '</div>';
+    });
+    html += '</div>';
+    cal.innerHTML = html;
+
+    const totalMl = sumMonth(Y, M);
+    total.innerHTML = '本月共 <b>' + fmt(totalMl) + ' ml</b>（约 ' + fmtL(totalMl) + ' 升）';
+  }
+
+  function renderYearView(navTitle, cal, total) {
+    const Y = new Date().getFullYear() + offset;
+    navTitle.textContent = Y + '年';
+
+    let maxMl = 0;
+    const months = [];
+    for (let m = 0; m < 12; m++) {
+      const ml = sumMonth(Y, m);
+      months.push(ml);
+      if (ml > maxMl) maxMl = ml;
+    }
+    let html = '<div class="year-grid">';
+    months.forEach((ml, m) => {
+      let lvl = '';
+      if (ml > 0 && maxMl > 0) {
+        const r = ml / maxMl;
+        if (r >= 0.7) lvl = 'l3';
+        else if (r >= 0.35) lvl = 'l2';
+        else lvl = 'l1';
+      }
+      html += '<div class="ymon' + (lvl ? ' ' + lvl : '') + '"><span class="ym">' + (m + 1) + '月</span><span class="ymv">' + (ml > 0 ? fmtL(ml) + '升' : '—') + '</span></div>';
+    });
+    html += '</div>';
+    cal.innerHTML = html;
+
+    const totalMl = months.reduce((s, x) => s + x, 0);
+    total.innerHTML = '今年共 <b>' + fmt(totalMl) + ' ml</b>（约 ' + fmtL(totalMl) + ' 升）';
+  }
+
+  // ---------- 动效 ----------
+  function spawnDrops() {
+    const btn = $('drinkBtn');
+    const rect = btn.getBoundingClientRect();
+    for (let i = 0; i < 5; i++) {
+      const el = document.createElement('div');
+      el.className = 'drop';
+      el.textContent = '💧';
+      el.style.left = (rect.left + rect.width / 2 + (Math.random() - 0.5) * 60) + 'px';
+      el.style.top = rect.top + 'px';
+      el.style.animationDelay = (i * 0.05) + 's';
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 1000);
+    }
+  }
+
+  function shakeCard() {
+    const card = document.querySelector('.goal-card');
+    card.classList.remove('shake');
+    void card.offsetWidth;
+    card.classList.add('shake');
+  }
+
+  // ---------- 事件 ----------
+  $('drinkBtn').addEventListener('click', () => {
+    state.records[todayKey()] = getToday() + 1;
+    save();
+    spawnDrops();
+    render();
+  });
+
+  undoBtn.addEventListener('click', () => {
+    const k = todayKey();
+    if ((state.records[k] || 0) > 0) {
+      state.records[k]--;
+      if (state.records[k] === 0) delete state.records[k];
+      save();
+      render();
+    }
+  });
+
+  $('resetBtn').addEventListener('click', () => {
+    if (getToday() === 0) { shakeCard(); return; }
+    if (confirm('确定重置今天的喝水记录吗？')) {
+      delete state.records[todayKey()];
+      save();
+      render();
+    }
+  });
+
+  $('goalMinus').addEventListener('click', () => setGoal(state.goalMl - 250));
+  $('goalPlus').addEventListener('click', () => setGoal(state.goalMl + 250));
+  $('mlMinus').addEventListener('click', () => setMl(state.cupMl - 50));
+  $('mlPlus').addEventListener('click', () => setMl(state.cupMl + 50));
+
+  function setGoal(v) {
+    if (v < 500 || v > 5000) { shakeCard(); return; }
+    state.goalMl = v;
+    save();
+    render();
+  }
+  function setMl(v) {
+    if (v < 100 || v > 2000) { shakeCard(); return; }
+    state.cupMl = v;
+    save();
+    render();
+  }
+
+  document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    view = t.dataset.view;
+    offset = 0;
+    renderStat();
+  }));
+
+  $('navPrev').addEventListener('click', () => { offset--; renderStat(); });
+  $('navNext').addEventListener('click', () => { offset++; renderStat(); });
+
+  // ---------- 数据备份 ----------
+  function toast(msg) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(t._timer);
+    t._timer = setTimeout(() => t.classList.remove('show'), 2200);
+  }
+
+  $('exportBtn').addEventListener('click', () => {
+    const json = JSON.stringify(state, null, 2);
+    try {
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = '喝水打卡备份-' + todayKey() + '.json';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) { /* 下载失败则仅走剪贴板 */ }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(json)
+        .then(() => toast('备份已复制到剪贴板，可粘贴到备忘录保存'))
+        .catch(() => toast('已导出备份文件'));
+    } else {
+      toast('已导出备份文件');
+    }
+  });
+
+  $('importBtn').addEventListener('click', () => $('importFile').click());
+
+  $('importFile').addEventListener('change', (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    const r = new FileReader();
+    r.onload = () => {
+      try {
+        const data = JSON.parse(r.result);
+        if (data && typeof data === 'object' && data.records) {
+          state = { goalMl: data.goalMl || 2000, cupMl: data.cupMl || 250, records: data.records || {} };
+          save();
+          render();
+          renderDate();
+          toast('备份已恢复 ✅');
+        } else {
+          toast('文件格式不正确');
+        }
+      } catch (err) {
+        toast('解析失败，请确认是备份文件');
+      }
+    };
+    r.readAsText(f);
+    e.target.value = '';
+  });
+
+  // ---------- 启动 ----------
+  load();
+  renderDate();
+  render();
+
+  // 注册 Service Worker（仅 http(s) 环境下生效）
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    });
+  }
+})();
+</script>
+</body>
+</html>
