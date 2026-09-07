@@ -145,7 +145,12 @@
     transition: transform 0.1s ease;
   }
   .stepper button:active { transform: scale(0.88); }
-  .stepper .val { width: 62px; text-align: center; font-size: 22px; font-weight: 800; color: var(--primary-deep); }
+  .stepper .val {
+    width: 76px; height: 44px; text-align: center; font-size: 21px; font-weight: 800;
+    color: var(--primary-deep); border: none; background: transparent; outline: none;
+    font-family: inherit; border-radius: 10px;
+  }
+  .stepper .val:focus { background: var(--primary-soft); }
 
   /* ---------- 统计日历 ---------- */
   .stat-card {
@@ -318,7 +323,7 @@
         <div class="goal-label">每日目标<b>目标毫升</b></div>
         <div class="stepper">
           <button id="goalMinus">−</button>
-          <div class="val" id="goalDisplay">2000</div>
+          <input class="val" id="goalDisplay" type="text" inputmode="numeric" autocomplete="off" value="2000">
           <button id="goalPlus">+</button>
         </div>
       </div>
@@ -327,7 +332,7 @@
         <div class="goal-label">每杯容量<b>毫升 / 杯</b></div>
         <div class="stepper">
           <button id="mlMinus">−</button>
-          <div class="val" id="mlDisplay">250</div>
+          <input class="val" id="mlDisplay" type="text" inputmode="numeric" autocomplete="off" value="250">
           <button id="mlPlus">+</button>
         </div>
       </div>
@@ -365,9 +370,14 @@
   const STORE_KEY = 'water-tracker-v1';
 
   // ---------- 数据 ----------
-  let state = { goalMl: 2000, cupMl: 250, records: {} }; // records: { 'YYYY-MM-DD': cups }
+  // records: { 'YYYY-MM-DD': [ml, ml, ...] }，每次喝水记录当杯的实际毫升，
+  // 之后修改目标或每杯容量都不会影响已记录的历史数据。
+  let state = { goalMl: 2000, cupMl: 250, records: {} };
   let view = 'week';
   let offset = 0;
+
+  const GOAL_MIN = 100, GOAL_MAX = 10000, GOAL_STEP = 50;
+  const CUP_MIN = 10, CUP_MAX = 3000, CUP_STEP = 10;
 
   function load() {
     try {
@@ -375,10 +385,10 @@
       if (raw) {
         const parsed = JSON.parse(raw);
         state.cupMl = parsed.cupMl || 250;
-        state.records = parsed.records || {};
         if (parsed.goalMl) state.goalMl = parsed.goalMl;
         else if (parsed.goal) state.goalMl = parsed.goal * state.cupMl; // 兼容旧数据：杯数 × 每杯容量
         else state.goalMl = 2000;
+        state.records = migrateRecords(parsed.records, state.cupMl);
       }
     } catch (e) { /* 忽略损坏数据 */ }
   }
@@ -386,10 +396,41 @@
     localStorage.setItem(STORE_KEY, JSON.stringify(state));
   }
 
+  // 旧版 records 存的是「杯数」，这里转换为「每杯实际毫升」的数组
+  function migrateRecords(records, cupMl) {
+    const out = {};
+    if (!records) return out;
+    Object.keys(records).forEach(k => {
+      const v = records[k];
+      if (Array.isArray(v)) {
+        const arr = v.filter(x => typeof x === 'number' && x > 0);
+        if (arr.length) out[k] = arr;
+      } else if (typeof v === 'number' && v > 0) {
+        const arr = [];
+        for (let i = 0; i < Math.floor(v); i++) arr.push(cupMl);
+        out[k] = arr;
+      }
+    });
+    return out;
+  }
+
   function pad(n) { return n < 10 ? '0' + n : '' + n; }
   function dateKey(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
   function todayKey() { return dateKey(new Date()); }
-  function getToday() { return state.records[todayKey()] || 0; }
+
+  // 某天实际喝的毫升数（记录后即固定，不随后续设置变化）
+  function dayMl(d) {
+    const r = state.records[dateKey(d)];
+    if (!r) return 0;
+    if (Array.isArray(r)) return r.reduce((s, x) => s + x, 0);
+    return Math.round(r * state.cupMl); // 兼容旧格式
+  }
+  function dayCups(d) {
+    const r = state.records[dateKey(d)];
+    if (!r) return 0;
+    if (Array.isArray(r)) return r.length;
+    return r; // 兼容旧格式
+  }
 
   function fmt(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
   function fmtL(ml) { return Math.round(ml / 100) / 10; }
@@ -405,9 +446,9 @@
     return days;
   }
   function sumDays(dates) {
-    let cups = 0;
-    dates.forEach(d => { cups += state.records[dateKey(d)] || 0; });
-    return cups * state.cupMl;
+    let ml = 0;
+    dates.forEach(d => { ml += dayMl(d); });
+    return ml;
   }
   function sumMonth(Y, M) {
     const dim = new Date(Y, M + 1, 0).getDate();
@@ -424,16 +465,15 @@
   const R = 90, CIRC = 2 * Math.PI * R;
 
   function render() {
-    const cups = getToday();
-    const cupMl = state.cupMl;
     const goalMl = state.goalMl;
-    const todayMl = cups * cupMl;
+    const todayMl = dayMl(new Date());
+    const cups = dayCups(new Date());
     const pct = Math.min(todayMl / goalMl, 1);
 
     mlNum.textContent = todayMl;
     goalMlNum.textContent = goalMl;
-    goalDisplay.textContent = goalMl;
-    mlDisplay.textContent = cupMl;
+    goalDisplay.value = goalMl;
+    mlDisplay.value = state.cupMl;
     pctText.textContent = cups + ' 杯 · ' + Math.round(pct * 100) + '%';
 
     ringFg.style.strokeDasharray = CIRC;
@@ -474,8 +514,7 @@
 
     let html = '<div class="week-grid">';
     days.forEach((d, i) => {
-      const cups = state.records[dateKey(d)] || 0;
-      const ml = cups * state.cupMl;
+      const ml = dayMl(d);
       const pct = Math.min(ml / state.goalMl, 1);
       const isToday = dateKey(d) === dateKey(today);
       let dotCls = 'wdot';
@@ -511,8 +550,7 @@
     html += '<div class="month-grid">';
     cells.forEach(c => {
       if (!c) { html += '<div class="day-cell empty"></div>'; return; }
-      const cups = state.records[dateKey(c)] || 0;
-      const ml = cups * state.cupMl;
+      const ml = dayMl(c);
       const pct = Math.min(ml / state.goalMl, 1);
       let cls = 'day-cell';
       if (pct > 0) cls += ' filled';
@@ -582,7 +620,9 @@
 
   // ---------- 事件 ----------
   $('drinkBtn').addEventListener('click', () => {
-    state.records[todayKey()] = getToday() + 1;
+    const k = todayKey();
+    if (!state.records[k]) state.records[k] = [];
+    state.records[k].push(state.cupMl);
     save();
     spawnDrops();
     render();
@@ -590,16 +630,17 @@
 
   undoBtn.addEventListener('click', () => {
     const k = todayKey();
-    if ((state.records[k] || 0) > 0) {
-      state.records[k]--;
-      if (state.records[k] === 0) delete state.records[k];
+    const arr = state.records[k];
+    if (Array.isArray(arr) && arr.length > 0) {
+      arr.pop();
+      if (arr.length === 0) delete state.records[k];
       save();
       render();
     }
   });
 
   $('resetBtn').addEventListener('click', () => {
-    if (getToday() === 0) { shakeCard(); return; }
+    if (!state.records[todayKey()]) { shakeCard(); return; }
     if (confirm('确定重置今天的喝水记录吗？')) {
       delete state.records[todayKey()];
       save();
@@ -607,23 +648,49 @@
     }
   });
 
-  $('goalMinus').addEventListener('click', () => setGoal(state.goalMl - 250));
-  $('goalPlus').addEventListener('click', () => setGoal(state.goalMl + 250));
-  $('mlMinus').addEventListener('click', () => setMl(state.cupMl - 50));
-  $('mlPlus').addEventListener('click', () => setMl(state.cupMl + 50));
+  $('goalMinus').addEventListener('click', () => {
+    if (state.goalMl - GOAL_STEP < GOAL_MIN) { shakeCard(); return; }
+    setGoal(state.goalMl - GOAL_STEP);
+  });
+  $('goalPlus').addEventListener('click', () => {
+    if (state.goalMl + GOAL_STEP > GOAL_MAX) { shakeCard(); return; }
+    setGoal(state.goalMl + GOAL_STEP);
+  });
+  $('mlMinus').addEventListener('click', () => {
+    if (state.cupMl - CUP_STEP < CUP_MIN) { shakeCard(); return; }
+    setCup(state.cupMl - CUP_STEP);
+  });
+  $('mlPlus').addEventListener('click', () => {
+    if (state.cupMl + CUP_STEP > CUP_MAX) { shakeCard(); return; }
+    setCup(state.cupMl + CUP_STEP);
+  });
 
   function setGoal(v) {
-    if (v < 500 || v > 5000) { shakeCard(); return; }
     state.goalMl = v;
     save();
     render();
   }
-  function setMl(v) {
-    if (v < 100 || v > 2000) { shakeCard(); return; }
+  function setCup(v) {
     state.cupMl = v;
     save();
     render();
   }
+
+  // 支持直接输入任意毫升数
+  function bindNumInput(el, current, apply, min, max) {
+    el.addEventListener('focus', () => el.select());
+    el.addEventListener('blur', commit);
+    el.addEventListener('keydown', e => { if (e.key === 'Enter') el.blur(); });
+    function commit() {
+      const raw = el.value.trim();
+      if (raw === '') { el.value = current(); return; }
+      const n = parseInt(raw, 10);
+      if (isNaN(n)) { el.value = current(); return; }
+      apply(Math.max(min, Math.min(max, n)));
+    }
+  }
+  bindNumInput(goalDisplay, () => state.goalMl, setGoal, GOAL_MIN, GOAL_MAX);
+  bindNumInput(mlDisplay, () => state.cupMl, setCup, CUP_MIN, CUP_MAX);
 
   document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
     document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
@@ -677,7 +744,7 @@
       try {
         const data = JSON.parse(r.result);
         if (data && typeof data === 'object' && data.records) {
-          state = { goalMl: data.goalMl || 2000, cupMl: data.cupMl || 250, records: data.records || {} };
+          state = { goalMl: data.goalMl || 2000, cupMl: data.cupMl || 250, records: migrateRecords(data.records, data.cupMl || 250) };
           save();
           render();
           renderDate();
